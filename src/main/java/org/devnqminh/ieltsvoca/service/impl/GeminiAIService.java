@@ -25,12 +25,12 @@ public class GeminiAIService implements AIService {
     private final RestTemplate restTemplate = new RestTemplate();
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    private static final String GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=";
+    private static final String GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=";
 
     @Override
     public WordEntry generateWordInfo(String word) {
         if (apiKey == null || apiKey.isEmpty()) {
-            return generateMockData(word);
+            return generateMockData(word, "API Key is missing or empty");
         }
 
         try {
@@ -55,16 +55,40 @@ public class GeminiAIService implements AIService {
 
             HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
 
+            //quan trong
             ResponseEntity<String> response = restTemplate.postForEntity(GEMINI_URL + apiKey, entity, String.class);
 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 return parseGeminiResponse(response.getBody(), word);
+            } else {
+                String errorDetails = "Status: " + response.getStatusCode();
+                if (response.getStatusCode().value() == 404) {
+                    errorDetails += ". Available models: " + listAvailableModels();
+                }
+                return generateMockData(word, errorDetails);
             }
         } catch (Exception e) {
             e.printStackTrace();
+            return generateMockData(word, "Exception: " + e.getMessage());
         }
+    }
 
-        return generateMockData(word);
+    private String listAvailableModels() {
+        try {
+            String url = "https://generativelanguage.googleapis.com/v1beta/models?key=" + apiKey;
+            ResponseEntity<String> response = restTemplate.getForEntity(url, String.class);
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                JsonNode root = objectMapper.readTree(response.getBody());
+                StringBuilder models = new StringBuilder();
+                for (JsonNode node : root.path("models")) {
+                    models.append(node.path("name").asText()).append(", ");
+                }
+                return models.toString();
+            }
+        } catch (Exception e) {
+            return "Could not list models: " + e.getMessage();
+        }
+        return "Unknown";
     }
 
     private WordEntry parseGeminiResponse(String responseBody, String originalWord) {
@@ -89,15 +113,15 @@ public class GeminiAIService implements AIService {
 
         } catch (Exception e) {
             e.printStackTrace();
-            return generateMockData(originalWord);
+            return generateMockData(originalWord, "Parsing Error: " + e.getMessage());
         }
     }
 
-    private WordEntry generateMockData(String word) {
+    private WordEntry generateMockData(String word, String errorMessage) {
         // Fallback mock data
         return WordEntry.builder()
                 .word(word)
-                .definition("This is a mock definition for " + word + ". Please configure a valid Gemini API Key.")
+                .definition("MOCK DATA (Error: " + errorMessage + "). Please check your API Key or Network.")
                 .exampleSentencesJson("[\"Example sentence 1 for " + word + "\", \"Example sentence 2\"]")
                 .synonymsJson("[\"synonym1\", \"synonym2\"]")
                 .antonymsJson("[\"antonym1\"]")
