@@ -35,6 +35,8 @@ public class UserAccountController {
         return userAccountService.createUser(user);
     }
 
+
+
     @PutMapping("/{id}")
     public ResponseEntity<UserAccountDTO> updateUser(@PathVariable Long id, @RequestBody UserAccount userDetails) {
         UserAccountDTO updatedUser = userAccountService.updateUser(id, userDetails);

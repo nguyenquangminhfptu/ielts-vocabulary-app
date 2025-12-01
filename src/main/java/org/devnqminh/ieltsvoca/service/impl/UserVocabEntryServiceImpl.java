@@ -42,17 +42,22 @@ public class UserVocabEntryServiceImpl implements UserVocabEntryService {
 
     @Override
     public UserVocabEntryDTO addWordToUser(Long userId, Long wordId, UserVocabEntry entryDetails) {
-        UserAccount user = userAccountRepository.findById(userId).orElseThrow(() -> new RuntimeException("User not found"));
-        WordEntry word = wordEntryRepository.findById(wordId).orElseThrow(() -> new RuntimeException("Word not found"));
+        // Check if exists
+        return userVocabEntryRepository.findByUserIdAndWordId(userId, wordId)
+                .map(this::convertToDTO)
+                .orElseGet(() -> {
+                    UserAccount user = userAccountRepository.findById(userId).orElseThrow(() -> new RuntimeException("User not found"));
+                    WordEntry word = wordEntryRepository.findById(wordId).orElseThrow(() -> new RuntimeException("Word not found"));
 
-        UserVocabEntry entry = new UserVocabEntry();
-        entry.setUser(user);
-        entry.setWord(word);
-        entry.setUserNote(entryDetails.getUserNote());
-        entry.setUserExample(entryDetails.getUserExample());
-        entry.setFavorite(entryDetails.getFavorite());
+                    UserVocabEntry entry = new UserVocabEntry();
+                    entry.setUser(user);
+                    entry.setWord(word);
+                    entry.setUserNote(entryDetails.getUserNote());
+                    entry.setUserExample(entryDetails.getUserExample());
+                    entry.setFavorite(entryDetails.getFavorite());
 
-        return convertToDTO(userVocabEntryRepository.save(entry));
+                    return convertToDTO(userVocabEntryRepository.save(entry));
+                });
     }
 
     @Override

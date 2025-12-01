@@ -11,4 +11,5 @@ public interface UserAccountService {
     UserAccountDTO createUser(UserAccount user);
     UserAccountDTO updateUser(Long id, UserAccount userDetails);
     void deleteUser(Long id);
+    UserAccountDTO login(String email, String password);
 }

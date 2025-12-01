@@ -50,6 +50,19 @@ public class UserAccountServiceImpl implements UserAccountService {
         userAccountRepository.deleteById(id);
     }
 
+    @Override
+    public UserAccountDTO login(String email, String password) {
+        UserAccount user = userAccountRepository.findAll().stream()
+                .filter(u -> u.getEmail().equals(email) && u.getPasswordHash().equals(password))
+                .findFirst()
+                .orElse(null);
+
+        if (user != null) {
+            return convertToDTO(user);
+        }
+        return null;
+    }
+
     private UserAccountDTO convertToDTO(UserAccount user) {
         return UserAccountDTO.builder()
                 .id(user.getId())
