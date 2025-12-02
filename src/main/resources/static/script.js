@@ -19,6 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const logoutBtn = document.getElementById('logoutBtn');
     const historySidebar = document.getElementById('historySidebar');
     const historyList = document.getElementById('historyList');
+    const notebookList = document.getElementById('notebookList');
 
     // Notebook Elements
     const notebookSection = document.getElementById('notebookSection');
@@ -88,8 +89,9 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             if (response.ok) {
-                const user = await response.json();
-                localStorage.setItem('currentUser', JSON.stringify(user));
+                const data = await response.json();
+                localStorage.setItem('currentUser', JSON.stringify(data.user));
+                localStorage.setItem('authToken', data.token);
                 window.location.href = 'index.html';
             } else {
                 authError.classList.remove('hidden');
@@ -129,6 +131,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function handleLogout() {
         localStorage.removeItem('currentUser');
+        localStorage.removeItem('authToken');
         window.location.reload();
     }
 
@@ -144,7 +147,12 @@ document.addEventListener('DOMContentLoaded', () => {
         if (notebookSection) hide(notebookSection);
 
         try {
-            const response = await fetch(`/api/words/lookup?word=${encodeURIComponent(word)}`);
+            const token = localStorage.getItem('authToken');
+            const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+
+            const response = await fetch(`/api/words/lookup?word=${encodeURIComponent(word)}`, {
+                headers: headers
+            });
 
             if (!response.ok) {
                 throw new Error(`Server returned status: ${response.status}`);
@@ -169,9 +177,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function addToHistory(wordId) {
         try {
+            const token = localStorage.getItem('authToken');
             const response = await fetch(`/api/user-vocab/user/${currentUser.id}/word/${wordId}`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
                 body: JSON.stringify({}) // Empty body for now
             });
 
@@ -188,7 +200,10 @@ document.addEventListener('DOMContentLoaded', () => {
     async function loadUserNote(wordId) {
         if (!currentUser) return;
         try {
-            const response = await fetch(`/api/user-vocab/user/${currentUser.id}/word/${wordId}`);
+            const token = localStorage.getItem('authToken');
+            const response = await fetch(`/api/user-vocab/user/${currentUser.id}/word/${wordId}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
             if (response.ok) {
                 const entry = await response.json();
                 currentUserVocabId = entry.id;
@@ -210,9 +225,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const example = userExampleInput.value;
 
         try {
+            const token = localStorage.getItem('authToken');
             const response = await fetch(`/api/user-vocab/${currentUserVocabId}`, {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
                 body: JSON.stringify({
                     userNote: note,
                     userExample: example,
@@ -232,11 +251,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function loadHistory() {
-        if (!historyList) return;
+        if (!historyList || !notebookList) return;
         try {
-            const response = await fetch(`/api/user-vocab/user/${currentUser.id}`);
+            const token = localStorage.getItem('authToken');
+            const response = await fetch(`/api/user-vocab/user/${currentUser.id}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
             if (response.ok) {
                 const entries = await response.json();
+                renderNotebookList(entries);
                 renderHistoryList(entries);
             }
         } catch (e) {
@@ -244,20 +267,76 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function renderHistoryList(entries) {
-        historyList.innerHTML = '';
-        // Sort by newest first
-        entries.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    function renderNotebookList(entries) {
+        notebookList.innerHTML = '';
+        // Filter entries with notes or examples
+        const savedEntries = entries.filter(e => e.userNote || e.userExample);
+        savedEntries.sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
 
-        entries.forEach(entry => {
+        if (savedEntries.length === 0) {
+            notebookList.innerHTML = '<li class="text-muted" style="padding:0.5rem; cursor:default;">No saved notes yet.</li>';
+            return;
+        }
+
+        savedEntries.forEach(entry => {
             const li = document.createElement('li');
-            li.innerHTML = `<i class="fa-solid fa-clock-rotate-left"></i> ${entry.word}`;
+            li.innerHTML = `<i class="fa-solid fa-book-bookmark"></i> ${entry.word}`;
             li.onclick = () => {
                 wordInput.value = entry.word;
                 handleSearch();
             };
+            notebookList.appendChild(li);
+        });
+    }
+
+    function renderHistoryList(entries) {
+        historyList.innerHTML = '';
+        // Sort by newest first (using updatedAt if available for duplicates)
+        entries.sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
+
+        entries.forEach(entry => {
+            const li = document.createElement('li');
+            li.className = 'history-item';
+
+            const wordSpan = document.createElement('span');
+            wordSpan.innerHTML = `<i class="fa-solid fa-clock-rotate-left"></i> ${entry.word}`;
+            wordSpan.onclick = () => {
+                wordInput.value = entry.word;
+                handleSearch();
+            };
+
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'delete-btn';
+            deleteBtn.innerHTML = '<i class="fa-solid fa-times"></i>';
+            deleteBtn.onclick = (e) => {
+                e.stopPropagation();
+                deleteHistoryItem(entry.id);
+            };
+
+            li.appendChild(wordSpan);
+            li.appendChild(deleteBtn);
             historyList.appendChild(li);
         });
+    }
+
+    async function deleteHistoryItem(id) {
+        if (!confirm('Are you sure you want to delete this item?')) return;
+
+        try {
+            const token = localStorage.getItem('authToken');
+            const response = await fetch(`/api/user-vocab/${id}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (response.ok) {
+                loadHistory(); // Refresh lists
+            } else {
+                alert('Failed to delete item.');
+            }
+        } catch (e) {
+            console.error('Error deleting item', e);
+        }
     }
 
     // --- Helper Functions ---

@@ -14,11 +14,18 @@ public class AuthController {
     @Autowired
     private UserAccountService userAccountService;
 
+    @Autowired
+    private org.devnqminh.ieltsvoca.util.JwtUtil jwtUtil;
+
     @PostMapping("/login")
-    public ResponseEntity<UserAccountDTO> login(@RequestBody UserAccount loginRequest) {
+    public ResponseEntity<?> login(@RequestBody UserAccount loginRequest) {
         UserAccountDTO user = userAccountService.login(loginRequest.getEmail(), loginRequest.getPasswordHash());
         if (user != null) {
-            return ResponseEntity.ok(user);
+            String token = jwtUtil.generateToken(user.getEmail());
+            java.util.Map<String, Object> response = new java.util.HashMap<>();
+            response.put("user", user);
+            response.put("token", token);
+            return ResponseEntity.ok(response);
         }
         return ResponseEntity.status(401).build();
     }

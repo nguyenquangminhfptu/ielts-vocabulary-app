@@ -43,8 +43,13 @@ public class UserVocabEntryServiceImpl implements UserVocabEntryService {
     @Override
     public UserVocabEntryDTO addWordToUser(Long userId, Long wordId, UserVocabEntry entryDetails) {
         // Check if exists
+        // Check if exists
         return userVocabEntryRepository.findByUserIdAndWordId(userId, wordId)
-                .map(this::convertToDTO)
+                .map(entry -> {
+                    // Update timestamp to move to top of history
+                    entry.setUpdatedAt(java.time.LocalDateTime.now());
+                    return convertToDTO(userVocabEntryRepository.save(entry));
+                })
                 .orElseGet(() -> {
                     UserAccount user = userAccountRepository.findById(userId).orElseThrow(() -> new RuntimeException("User not found"));
                     WordEntry word = wordEntryRepository.findById(wordId).orElseThrow(() -> new RuntimeException("Word not found"));
